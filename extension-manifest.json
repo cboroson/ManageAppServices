@@ -1,0 +1,72 @@
+{
+  "manifestVersion": 1,
+  "id": "cboroson-ManageAppServices",
+  "name": "Manage App Services",
+  "version": "1.0.6",
+  "publisher": "cboroson",
+  "public": false,
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "description": "Stop, start or verify all app services in a resource group.",
+  "scopes": [
+    "vso.build",
+    "vso.serviceendpoint"
+  ],    
+  "categories": [
+    "Build and release"
+  ],
+  "tags": [
+    "App Services",
+    "Release",
+    "Stop",
+    "Start"
+  ],
+  "content": {
+    "details": {
+      "path": "readme.md"
+    },
+    "license": {
+      "path": "ManageAppServices-extension/license.txt"
+    }
+  },
+  "links": {
+    "getstarted": {
+      "uri": "https://github.com/cboroson/ManageAppServices"
+    },
+    "support": {
+      "uri": "https://github.com/cboroson/ManageAppServices"
+    }
+  },
+
+
+
+  "branding": {
+    "color": "rgb(36, 43, 50)",
+    "theme": "dark"
+  },
+  "icons": {
+    "default": "ManageAppServices-extension/images/ManageAppServices.png"
+  },
+  "files": [
+  {
+    "path": "ManageAppServices-release", "addressable": true
+  }
+],
+
+  "contributions": [
+    {
+      "id": "cboroson-ManageAppServices",
+      "type": "ms.vss-distributed-task.task",
+      "description": "Stop, start or verify all app services in a resource group.",
+      "targets": [
+        "ms.vss-distributed-task.tasks"
+      ],
+      "properties": {
+        "name": "ManageAppServices-release"
+      }
+    }
+  ]
+}
