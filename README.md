@@ -13,7 +13,7 @@ None.
 ## Configuration
 This is fairly self-explanatory and I've included comments for the different options in the GUI.
 
-![](Screenshot1.jpeg)
+![](https://github.com/cboroson/ManageAppServices/blob/master/ManageAppServices-release/Screenshot1.jpeg)
 
 
 ## Contributing
