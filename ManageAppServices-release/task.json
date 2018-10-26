@@ -8,8 +8,8 @@
   "author": "Craig Boroson",
   "version": {
     "Major": 1,
-    "Minor": 0,
-    "Patch": 6
+    "Minor": 2,
+    "Patch": 0
   },
   "demands": [ "azureps" ],
   "visibility": [
@@ -67,6 +67,14 @@
       "defaultValue": "true",
       "required": true,
       "helpMarkDown": "If the selected action is 'Stop' or 'Start' and the services do not respond to the action, the task will fail.  When this option is not selected, the task will not check the status of the services after performing the action."
+    },
+    {
+      "name": "ExcludeSites",
+      "type": "string",
+      "label": "Exclude Sites",
+      "defaultValue": "",
+      "required": false,
+      "helpMarkDown": "Optional regular expression to exclude sites matching this regex value."
     }
 ],
 "dataSourceBindings": [

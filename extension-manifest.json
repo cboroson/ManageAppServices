@@ -2,9 +2,9 @@
   "manifestVersion": 1,
   "id": "cboroson-ManageAppServices",
   "name": "Manage App Services",
-  "version": "1.0.6",
+  "version": "1.2.0",
   "publisher": "cboroson",
-  "public": false,
+  "public": true,
   "targets": [
     {
       "id": "Microsoft.VisualStudio.Services"

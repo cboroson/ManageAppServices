@@ -4,6 +4,7 @@ $ResourceGroupName= Get-VstsInput -Name "resourceGroupName"
 $Action= Get-VstsInput -Name "Action"
 $IncludeWebjobs = Get-VstsInput -name "IncludeWebjobs"
 $FailTask = Get-VstsInput -name "FailTask"
+$ExcludeSites = Get-VstsInput -name "ExcludeSites"
 
 ################# Initialize Azure. #################
 Import-Module $PSScriptRoot\ps_modules\VstsAzureHelpers_
@@ -11,8 +12,14 @@ Initialize-Azure
 
 function Get-AppServices ($ResourceGroupName) {
 
-    # Get all App Services and Function Apps
-    $sites = Get-AzureRmWebApp -ResourceGroupName $ResourceGroupName | sort-object Name
+    if ($ExcludeSites) {
+        # Get all App Services and Function Apps
+        $sites = Get-AzureRmWebApp -ResourceGroupName $ResourceGroupName | where {$_.name -notmatch $ExcludeSites} | sort-object Name
+    }
+    else{
+       # Get all App Services and Function Apps
+        $sites = Get-AzureRmWebApp -ResourceGroupName $ResourceGroupName | sort-object Name
+    }
 
     Return $sites
 }
@@ -46,10 +53,26 @@ function Get-WebJobs ($ResourceGroupName, $Sites) {
     Return $AllWebJobs
 }
 
+################# Display Services #################
+
+function Display-Status ($sites) {
+    write-host "Current state of all Applications in resource group $ResourceGroupName"
+    write-host $($sites | select name, state | out-string)
+
+    if ($IncludeWebjobs -eq "true"){
+        write-host "Current state of all webjobs in resource group $ResourceGroupName"
+        write-host $($AllWebJobs | out-string)
+    }
+}
+
 
 ################# Get Status #################
 $sites = Get-AppServices $ResourceGroupName
 if ($IncludeWebjobs -eq "true"){ $AllWebJobs = Get-WebJobs $ResourceGroupName $Sites }
+
+
+################# Verify Services #################
+if ($action -eq "check") { Display-Status $Sites }
 
 
 ################# Stop Services #################
@@ -72,7 +95,7 @@ if ($action -eq "stop") {
             write-host "Stopping $($Webjob.WebJobName) on $($webjob.siteName)"
 
             Invoke-AzureRmResourceAction `
-                -ResourceGroup $resourceGroup `
+                -ResourceGroup $resourceGroupName `
                 -ResourceType microsoft.web/sites/continuouswebjobs `
                 -ResourceName "$($webjob.siteName)/$($Webjob.WebJobName)" `
                 -Action stop `
@@ -82,51 +105,58 @@ if ($action -eq "stop") {
     }
 
     # Validate that all services are stopped
-    if ($FailTask -eq "true"){
-        write-host "Waiting for services to stop..."
-        start-sleep 30
-        $sites = Get-AppServices $ResourceGroupName
+    write-host "Waiting for services to stop..."
 
+    for($i = 0; $i -lt 5; $i++) {
+        $sites = Get-AppServices $ResourceGroupName
         $NotStoppedSites = $sites | where {$_.state -ne "Stopped"}
         if ($NotStoppedSites) {
-            write-VSTSError "One or more services did not respond to the control function."
-            write-VSTSError $($NotStoppedSites.Name | Out-String)
+            start-sleep 5
+        }
+        else {
+            $i = 5
+        }
+    }
+
+    if ($NotStoppedSites -and $FailTask -eq "true") {
+        Display-Status $Sites
+        write-Error "One or more services did not respond to the control function."
+        Trace-VstsLeavingInvocation $MyInvocation
+        $host.SetShouldExit(1)
+    }
+
+    if ($IncludeWebjobs -eq "true"){ 
+        
+        for($i = 0; $i -lt 5; $i++) {
+
+            $AllWebJobs = Get-WebJobs $ResourceGroupName $Sites
+            $NotStoppedWebJobs = $AllWebJobs | where {$_.WebJobstatus -ne "Stopped"}
+            if ($NotStoppedWebJobs) {
+                start-sleep 5
+            }
+            else {
+                $i = 5
+            }
+        }
+
+        if ($NotStoppedWebJobs -and $FailTask -eq "true") {
+            Display-Status $Sites
+            write-Error "One or more services did not respond to the control function."
             Trace-VstsLeavingInvocation $MyInvocation
             $host.SetShouldExit(1)
         }
-
-        if ($IncludeWebjobs -eq "true"){ 
-            $AllWebJobs = Get-WebJobs $ResourceGroupName $Sites
-            
-            $NotStoppedWebJobs = $AllWebJobs | where {$_.WebJobstatus -ne "Stopped"}
-            if ($NotStoppedWebJobs) {
-                write-VSTSError "One or more services did not respond to the control function."
-                write-VSTSError $($NotStoppedWebJobs.WebJobName | Out-String)
-                Trace-VstsLeavingInvocation $MyInvocation
-                $host.SetShouldExit(1)
-            }
-        }
-    }
-}
-
-################# Verify Services #################
-if ($action -eq "check") {
-    write-host "Current state of all Applications in resource group $ResourceGroupName"
-    write-host $($sites | select name, state | out-string)
-
-    if ($IncludeWebjobs -eq "true"){
-        write-host "Current state of all webjobs in resource group $ResourceGroupName"
-        write-host $($AllWebJobs | out-string)
     }
 
+    Display-Status $Sites
 }
+
 
 ################# Start Services #################
 if ($action -eq "start") {
      write-host "Request to start services"
 
     # Start web apps
-    foreach ($site in ($sites | where {$_.state -ne "Started"})) {
+    foreach ($site in ($sites | where {$_.state -ne "Running"})) {
         
         write-host "Starting $($site.name)"
         $site | Start-AzureRmWebApp -ResourceGroupName $ResourceGroupName | out-null
@@ -141,7 +171,7 @@ if ($action -eq "start") {
             write-host "Starting $($Webjob.WebJobName) on $($webjob.siteName)"
 
             Invoke-AzureRmResourceAction `
-                -ResourceGroup $resourceGroup `
+                -ResourceGroup $resourceGroupName `
                 -ResourceType microsoft.web/sites/continuouswebjobs `
                 -ResourceName "$($webjob.siteName)/$($Webjob.WebJobName)" `
                 -Action start `
@@ -151,32 +181,49 @@ if ($action -eq "start") {
     }
 
     # Validate that all services are started
-    if ($FailTask -eq "true"){
-        write-host "Waiting for services to start..."
-        start-sleep 30
-        $sites = Get-AppServices $ResourceGroupName
+    write-host "Waiting for services to start..."
 
+    for($i = 0; $i -lt 5; $i++) {
+        $sites = Get-AppServices $ResourceGroupName
         $NotStartedSites = $sites | where {$_.state -ne "Running"}
         if ($NotStartedSites) {
-            write-VSTSError "One or more services did not respond to the control function."
-            write-VSTSError $($NotStartedSites.Name | Out-String)
+            start-sleep 5
+        }
+        else {
+            $i = 5
+        }
+    }
+
+    if ($NotStartedSites -and $FailTask -eq "true") {
+        Display-Status $Sites
+        write-Error "One or more services did not respond to the control function."
+        Trace-VstsLeavingInvocation $MyInvocation
+        $host.SetShouldExit(1)
+    }
+
+    if ($IncludeWebjobs -eq "true"){ 
+        
+        for($i = 0; $i -lt 5; $i++) {
+
+            $AllWebJobs = Get-WebJobs $ResourceGroupName $Sites
+            $NotStartedWebJobs = $AllWebJobs | where {$_.WebJobstatus -ne "Running"}
+            if ($NotStartedWebJobs) {
+                start-sleep 5
+            }
+            else {
+                $i = 5
+            }
+        }
+
+        if ($NotStartedWebJobs -and $FailTask -eq "true") {
+            Display-Status $Sites
+            write-Error "One or more services did not respond to the control function."
             Trace-VstsLeavingInvocation $MyInvocation
             $host.SetShouldExit(1)
         }
-
-        if ($IncludeWebjobs -eq "true"){ 
-            $AllWebJobs = Get-WebJobs $ResourceGroupName $Sites
-            
-            $NotStartedWebJobs = $AllWebJobs | where {$_.WebJobstatus -ne "Running"}
-            if ($NotStartedWebJobs) {
-                write-VSTSError "One or more services did not respond to the control function."
-                write-VSTSError $($NotStartedWebJobs.WebJobName | Out-String)
-                Trace-VstsLeavingInvocation $MyInvocation
-                $host.SetShouldExit(1)
-            }
-        }
     }
-}
 
+    Display-Status $Sites
+}
 
 Trace-VstsLeavingInvocation $MyInvocation
